@@ -1,0 +1,65 @@
+#ifndef _CYLINDER_H
+#define _CYLINDER_H
+
+/**********************************************
+filename:	sysStorage.h
+**********************************************/
+#include "misc.h"
+#include "input.h"
+#include "output.h"
+/*****************************************************************************
+ @ public defines
+****************************************************************************/
+#define CLDR_TIMEOUT 0
+#define CLDR_GOTTO   1
+#define NULL_INDX 0XFF
+
+/*****************************************************************************
+ @ typedefs
+****************************************************************************/
+typedef enum {
+	POS_MOVING 	= 0,	//
+	POS_RESET		= 1,	//
+	POS_ACTION	= 2		//
+}cldrPos_T;
+
+typedef enum {
+	CLDR_L = 0,
+	CLDR_H = 1
+} cldrLogic_t;
+
+typedef struct{
+	u8 INDX;
+	cldrLogic_t resetPosLogic;
+} cldrPin_T;
+
+typedef struct{
+	u8 name[DEV_NAME_LEN];
+	/* sensor config  	*/	
+	INPUT_DEV_T* pInputDev;
+	cldrPin_T sensorReset;		
+	cldrPin_T sensorAction;	
+	/* driver config  	*/	
+	OUTPUT_DEV_T* pOutputDev;	
+	cldrPin_T drvReset;
+	cldrPin_T drvAction;
+	
+	/* control  */
+	cldrPos_T tgtPos;			/* target position 		*/
+	cldrPos_T curPos;			/* current position,read only	*/
+	void (*newPosCallback)	(const u8 *devName, cldrPos_T curPos);
+	void (*timeOutCallback)	(const u8 *devName);
+	u16 tick;
+	u8 tickUnit;	//in ms
+	u16 timeout;	//in ms
+}CLDR_RSRC_T;
+
+typedef struct{
+	CLDR_RSRC_T rsrc;
+	void (*TickTask)(CLDR_RSRC_T* pRsrc);
+	void (*GotoPos)(CLDR_RSRC_T* pRsrc, cldrPos_T pos, u16 timeout);
+}CLDR_DEV_T;
+
+void cylinderSetup(CLDR_DEV_T *pDev, const u8* NAME);
+
+#endif

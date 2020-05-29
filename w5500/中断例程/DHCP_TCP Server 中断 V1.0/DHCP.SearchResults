@@ -1,0 +1,49 @@
+---- DHCP Matches (48 in 4 files) ----
+Config.h (user\include):	uint8  DHCP;
+Device.c (user):extern uint8 MAC[6];//public buffer for DHCP, DNS, HTTP
+Device.c (user):    // Set DHCP
+Device.c (user):    Config_Msg.DHCP = Enable_DHCP;
+Dhcp.c (user):uint8*   GET_SN_MASK    = EXTERN_DHCP_SN;     // Subnet mask received from the DHCP server
+Dhcp.c (user):uint8*   GET_GW_IP      = EXTERN_DHCP_GW;     // Gateway ip address received from the DHCP server
+Dhcp.c (user):uint8*   GET_DNS_IP     = EXTERN_DHCP_DNS;    // DNS server ip address received from the DHCP server
+Dhcp.c (user):uint8*   GET_SIP        = EXTERN_DHCP_SIP;    // Local ip address received from the DHCP server
+Dhcp.c (user):uint8    DHCP_REAL_SIP[4] = {0,}; // For extract my DHCP server in a few DHCP servers
+Dhcp.c (user):uint8    OLD_SIP[4];        // Previous local ip address received from DHCP server
+Dhcp.c (user):uint8  dhcp_state       = STATE_DHCP_READY;          // DHCP client status
+Dhcp.c (user):uint8  DHCP_timeout     = 0;        // DHCP Timeout flag
+Dhcp.c (user):uint32  next_dhcp_time  = 0;      // DHCP Time 1s
+Dhcp.c (user):RIP_MSG*  pRIPMSG = (RIP_MSG*)EXTERN_DHCPBUF;         // Pointer for the DHCP message
+Dhcp.c (user):void  send_DHCP_DISCOVER(void);// Send the discovery message to the DHCP server
+Dhcp.c (user):void  send_DHCP_REQUEST(void);// Send the request message to the DHCP server
+Dhcp.c (user):void  send_DHCP_RELEASE_DECLINE(char msgtype);// send the release message to the DHCP server
+Dhcp.c (user):uint8 parseDHCPMSG(uint16 length);// Receive the message from DHCP server and parse it.
+Dhcp.c (user):void  reset_DHCP_time(void);        // Initialize DHCP Timer
+Dhcp.c (user):void  DHCP_timer_handler(void);     // DHCP Timer handler
+Dhcp.c (user):void  check_DHCP_Timeout(void);     // Check DHCP Timeout 
+Dhcp.c (user):*              SEND DHCP DISCOVER
+Dhcp.c (user):*              SEND DHCP DISCOVER
+Dhcp.c (user):* Description: This function sends DHCP DISCOVER message to DHCP server.
+Dhcp.c (user):*              SEND DHCP REQUEST
+Dhcp.c (user):* Description: This function sends DHCP REQUEST message to DHCP server.
+Dhcp.c (user):*              SEND DHCP RELEASE
+Dhcp.c (user):* Description: This function sends DHCP RELEASE message to DHCP server.
+Dhcp.c (user):* Description: This function parses the reply message from DHCP server.
+Dhcp.c (user):      printf("DHCP : NO DHCP MSG\r\n");
+Dhcp.c (user):      printf("No My DHCP Message. This message is ignored.\r\n");
+Dhcp.c (user):            printf("Another DHCP sever send a response message. This is ignored.\r\n");
+Dhcp.c (user):    printf("DHCP MSG received\r\n");
+Dhcp.c (user):        memcpy(DHCP_REAL_SIP,svr_addr,4);	// Copy the real ip address of my DHCP server
+Dhcp.c (user):        printf("My DHCP server real IP address : ");
+Dhcp.c (user):*              CHECK DHCP STATE
+Dhcp.c (user):* Description: This function checks the state of DHCP.
+Dhcp.c (user):          printf("The IP address from the DHCP server is updated.\r\n");
+Dhcp.c (user):* Description: This function checks the timeout of DHCP in each state.
+Dhcp.c (user):* Description: Initialize the DHCP client
+Dhcp.c (user):* Arguments  : s - Socket number for the DHCP client
+Dhcp.h (user\include):/* DHCP state machine. */
+Dhcp.h (user\include):/* UDP port numbers for DHCP */
+Dhcp.h (user\include):/* DHCP message OP code */
+Dhcp.h (user\include):/* DHCP message type */
+Dhcp.h (user\include):/* DHCP option and value (cf. RFC1533) */
+Dhcp.h (user\include)://uint8 getIP_DHCPS(void);      // Get the network configuration from the DHCP server
+Dhcp.h (user\include):uint8 check_DHCP_state(SOCKET s); // Check the DHCP state

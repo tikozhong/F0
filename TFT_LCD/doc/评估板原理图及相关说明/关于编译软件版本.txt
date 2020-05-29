@@ -1,0 +1,1 @@
+MDK软件最好使用4.54版本，下载地址：http://www.mcu123.com/news/Soft/embsof/arm/201207/548.html
