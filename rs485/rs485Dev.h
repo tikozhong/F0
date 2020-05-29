@@ -1,50 +1,61 @@
 /******************** (C) COPYRIGHT 2015 INCUBECN *****************************
-* File Name          : response.h
+* File Name          : rs485Dev.h
 * Author             : Tiko Zhong
-* Date First Issued  : 20170221
+* Date First Issued  : 04/20/2020
 * Description        : This file provides a set of functions needed to manage the
 *                      communication using HAL_UARTxxx
 ********************************************************************************
 * History:
-* 12/01/2015: V0.0
+* 04/20/2020: V0.1
 *******************************************************************************/
 
 /* Define to prevent recursive inclusion -------------------------------------*/
-#ifndef _RESPONSE_X_H
-#define _RESPONSE_X_H
+#ifndef _RS485_DEV_H
+#define _RS485_DEV_H
 
 /* Includes ------------------------------------------------------------------*/
 #include "misc.h"
-#include "packet.h"
-
-extern const char OK[];
-extern const char ERR[];
-extern const char MSG[];
-
-//extern const char UNK[];
-/*
-%d    signed int, in decimal
-%u    unsigned int, in decimal
-%f    float, in decimal
-%s    string
-%x    signed/unsigned int, in hex
-%%    '%'
-
-%md    signed int, in decimal; fill '0' if no enough
-%mu    unsigned int, in decimal
-%m.nf  float, in decimal
-%ms    string
-%mx    signed/unsigned int, in hex
-*/
+#include "uartdev.h"
 
 /* Exported types ------------------------------------------------------------*/
+typedef struct{
+	UartDev_t uartdev;
+	PIN_T DE, DET;
+	u8 squ;
+	u16 tick;
+}Rs485Rsrc_t;
+
+typedef struct{
+	Rs485Rsrc_t rsrc;
+	u8 (*RxMonitor)		(Rs485Rsrc_t *pRsrc);
+	u8* (*RxFetchFrame)	(Rs485Rsrc_t *pRsrc, u16* len);
+	u16 (*TxMonitor)	(Rs485Rsrc_t *pRsrc);
+	u16 (*TxSend)		(Rs485Rsrc_t *pRsrc, const u8* BUF, u16 len);	
+}Rs485Dev_t;
+
+
+/* Exported variables --------------------------------------------------------*/
+//extern u8 rxBufIndx;
 /* Exported constants --------------------------------------------------------*/
 /* Exported macro ------------------------------------------------------------*/
 /* Exported functions ------------------------------------------------------- */
-s8 RESPONSE_X(const char* PREFIX, char* rtnStr, u8 rtnStrSz, const char* DEVNAME, const char* FUNC_NAME, const char* FORMAT_ORG, ...);
-s8 RESPONSE(PAKET_T *packet, const char* PREFIX, const char* DEVNAME, const char* FUNC_NAME, const char* FORMAT, ...);
-s8 RESPONSE_ORG(PAKET_T *packet, const char* PREFIX, const PAKET_T *PACKET);
+void setupRs485Dev(
+	Rs485Dev_t *pDev, 
+	UART_HandleTypeDef* huart,
+	u8* p,	/*	all memmory	*/
+	u16	rxPoolLen,
+	u16 rxBufLen,
+	u16 txBufLen,
+	const PIN_T DET,
+	const PIN_T DE
+);
 
-#endif /* _CMD_H */
+	
+//void setupRs485Dev1(
+//	Rs485Dev_t *pDev, 
+//	UartDev_t *pUartDev
+//);
+
+#endif /* _MY_UART_H */
 
 /******************* (C) COPYRIGHT 2015 INCUBECN *****END OF FILE****/

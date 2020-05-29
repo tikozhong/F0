@@ -8,7 +8,11 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "inputCmd.h"
-#include "responseX.h"
+#include "string.h"
+#include "stdarg.h"
+#include "string.h"
+#include "stdio.h"
+#include "stdlib.h"
 
 /* Private typedef -----------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
@@ -17,184 +21,107 @@
 /* Private variables ---------------------------------------------------------*/
 const char INPUT_HELP[] = {
 	"input commands:"
-	"\n input.help()"
-	"\n input.readPin()/(indx)/(indx0,indx1)"
-	"\n input.enableFalling(indx)/()"
-	"\n input.disableFalling(indx)/()"	
-	"\n input.enableRaising(indx)/()"
-	"\n input.disableRaising(indx)/()\r\n"
+	"\n dev.help()"
+	"\n dev.rename()"
+	"\n dev.readPin()/(indx)/(indx0,indx1)"
+	"\n dev.enableFalling(indx)/()"
+	"\n dev.disableFalling(indx)/()"
+	"\n dev.enableRaising(indx)/()"
+	"\n dev.disableRaising(indx)/()"
+	"\r\n"
 };
 
 /* Private function prototypes -----------------------------------------------*/
+
 /*******************************************************************************
 * Function Name  : inputCmd
 * Description    : gpio function commands
-* Input          : - huart : using this uart to print
-									: - cmdStr : the command string
+* Input          : 
+									: 
 * Output         : None
 * Return         : None 
+
+output.writepin(%pin, %state)
+output.toggle(%pin)
 *******************************************************************************/
-u8 inputCmd(INPUT_DEV_T *pDev, PAKET_T *packetIn, PAKET_T *packetOut){
+u8 inputCmd(INPUT_DEV_T *dev, char* cmd, u16 len, const char* CMD){
 	u32 i,j,ii,jj;
+	const char* line;
+	char name[16] = {0};
+	INPUT_RSRC_T *pRsrc = &dev->rsrc;
 	
-	packetReset(packetOut);
-	packetSetStyle(packetOut, PAKET_STYLE_CPP);
-	//%devName.help()
-	if(isSameStr(packetIn->addr[1], "help") && packetIsMatch(packetIn, "%s%s")){
-		RESPONSE_ORG(packetOut, OK, packetIn);
-		printS(INPUT_HELP);
-		return 1;
+	if(strncmp(CMD, pRsrc->name, strlen(pRsrc->name)) != 0)	return 0;
+	
+	line = &CMD[strlen(pRsrc->name)];
+	if(strncmp(line, ".help  ", strlen(".help  ")) == 0)	strFormat(cmd, len, INPUT_HELP);
+	//.rename
+	else if(sscanf(line, ".rename %s ", name)==1){
+		strFormat(cmd, len, "+ok@%s.rename(\"%s\")\r\n", pRsrc->name, name);
+		dev->Rename(&dev->rsrc, name);
 	}
-	//%devName.readpin()
-	else if(isSameStr(packetIn->addr[1], "readpin") && packetIsMatch(packetIn, "%s%s")){
-		RESPONSE(packetOut, OK, (char*)pDev->rsrc.name, "readpin", "%x", pDev->rsrc.status);
-		return 1;
-	}
-	//%devName.readpin(indx)
-	else if(isSameStr(packetIn->addr[1], "readpin") && packetIsMatch(packetIn, "%s%s%u")){
-		i = *(u32*)packetIn->addr[2];
-		if(i>16)	RESPONSE(packetOut, ERR, (char*)pDev->rsrc.name, "readpin", "%s", "param_err");
-		else{
-			j = 0x01 & (pDev->rsrc.status>>i);
-			RESPONSE(packetOut, OK, (char*)pDev->rsrc.name, "readpin", "%2d%d", i,j);
+	//input.readPin()/(indx)/(indx0,indx1)
+	else if(sscanf(line, ".readpin %d %d ", &i, &j)==2){
+		if(i>=dev->rsrc.gpioLen || j>=dev->rsrc.gpioLen){
+			strFormat(cmd, len, "+err@%s.readpin(\"overflow\")\r\n",pRsrc->name);	
+			return 1;	
 		}
-		return 1;
+		ii = 0;	jj = 0;
+		if(dev->ReadPin(&dev->rsrc, i))	ii = 1;
+		if(dev->ReadPin(&dev->rsrc, j))	jj = 1;
+		strFormat(cmd, len, "+ok@%s.readpin(%d,%d,%d,%d)\r\n", pRsrc->name, i, ii, j, jj);
 	}
-	//%devName.readpin(indx1,indx2)
-	else if(isSameStr(packetIn->addr[1], "readpin") && packetIsMatch(packetIn, "%s%s%u%u")){
-		i = *(u32*)packetIn->addr[2];
-		j = *(u32*)packetIn->addr[3];
-		if(i>16 || j>16)	RESPONSE(packetOut, ERR, (char*)pDev->rsrc.name, "readpin", "%s", "param_err");
-		else{
-			ii = 0x01 & (pDev->rsrc.status >> i);
-			jj = 0x01 & (pDev->rsrc.status >> j);
-			RESPONSE(packetOut, OK, (char*)pDev->rsrc.name, "readpin", "%2d%d%2d%d", i,ii,j,jj);
+	else if(sscanf(line, ".readpin %d ", &i)==1){
+		if(i>=dev->rsrc.gpioLen){	
+			strFormat(cmd, len, "+err@%s.readpin(\"overflow\")\r\n", pRsrc->name);	
+			return 1;	
 		}
-		return 1;
+		ii = 0;	
+		if(dev->ReadPin(&dev->rsrc, i))	ii = 1;
+		strFormat(cmd, len, "+ok@%s.readpin(%d,%d)\r\n", pRsrc->name, i, ii);
 	}
-
-	//%devName.enableFalling()
-	else if(isSameStr(packetIn->addr[1], "enablefalling") && packetIsMatch(packetIn, "%s%s")){
-		pDev->rsrc.enableFalling = 0xffff;
-		RESPONSE(packetOut, OK, (char*)pDev->rsrc.name, "enablefalling", "%x", pDev->rsrc.enableFalling);
-		return 1;
+	else if(strncmp(line, ".readpin  ", strlen("readpin  ")) == 0){
+		strFormat(cmd, len, "+ok@%s.readpin(0x%x)\r\n", pRsrc->name, dev->rsrc.status[0]);
 	}
-	//%devName.enablefalling(indx0)
-	else if(isSameStr(packetIn->addr[1], "enablefalling") && packetIsMatch(packetIn, "%s%s%u")){
-		i = *(u32*)packetIn->addr[2];
-		if(i>16)	RESPONSE(packetOut, ERR, (char*)pDev->rsrc.name, "enablefalling", "%s", "param_err");
-		else{
-			pDev->rsrc.enableFalling |= 1U<<i;
-			RESPONSE(packetOut, OK, (char*)pDev->rsrc.name, "enablefalling", "%x", pDev->rsrc.enableFalling);			
+	//"\n input.enableFalling(indx)/()"
+	else if(sscanf(line, ".enablefalling %d ", &i)==1){
+		if(i>=dev->rsrc.gpioLen){	
+			strFormat(cmd, len, "+err@%s.enablefalling(\"overflow\")\r\n", pRsrc->name);	
+			return 1;	
 		}
-		return 1;
+		pRsrc->enableFalling |= BIT(i);
+		strFormat(cmd, len, "+ok@%s.enablefalling(0x%x)\r\n", pRsrc->name, pRsrc->enableFalling);
 	}
-	//%devName.enablefalling(indx0,indx1)
-	else if(isSameStr(packetIn->addr[1], "enablefalling") && packetIsMatch(packetIn, "%s%s%u%u")){
-		i = *(u32*)packetIn->addr[2];
-		j = *(u32*)packetIn->addr[3];
-		if(i>16 || j>16)	RESPONSE(packetOut, ERR, (char*)pDev->rsrc.name, "enablefalling", "%s", "param_err");
-		else{
-			pDev->rsrc.enableFalling |= 1U<<i;
-			pDev->rsrc.enableFalling |= 1U<<j;
-			RESPONSE(packetOut, OK, (char*)pDev->rsrc.name, "enablefalling", "%x", pDev->rsrc.enableFalling);			
+	//"\n input.disableFalling(indx)/()"	
+	else if(sscanf(line, ".disablefalling %d ", &i)==1){
+		if(i>=dev->rsrc.gpioLen){	
+			strFormat(cmd, len, "+err@%s.disablefalling(\"overflow\")\r\n", pRsrc->name);	
+			return 1;	
 		}
-		return 1;
+		pRsrc->enableFalling &= 0xffff ^ BIT(i);
+		strFormat(cmd, len, "+ok@%s.disablefalling(0x%x)\r\n", pRsrc->name, pRsrc->enableFalling);
 	}
-	//%devName.enableRaising()
-	else if(isSameStr(packetIn->addr[1], "enableraising") && packetIsMatch(packetIn, "%s%s")){
-		pDev->rsrc.enableRaising = 0xffff;
-		RESPONSE(packetOut, OK, (char*)pDev->rsrc.name, "enableraising", "%x", pDev->rsrc.enableRaising);
-		return 1;
-	}
-	//%devName.enableRaising(indx0)
-	else if(isSameStr(packetIn->addr[1], "enableraising") && packetIsMatch(packetIn, "%s%s%u")){
-		i = *(u32*)packetIn->addr[2];
-		if(i>16)	RESPONSE(packetOut, ERR, (char*)pDev->rsrc.name, "enableraising", "%s", "param_err");
-		else{
-			pDev->rsrc.enableRaising |= 1U<<i;
-			RESPONSE(packetOut, OK, (char*)pDev->rsrc.name, "enableraising", "%x", pDev->rsrc.enableRaising);			
+	//"\n input.enableRaising(indx)/()"
+	else if(sscanf(line, ".enableraising %d ", &i)==1){
+		if(i>=dev->rsrc.gpioLen){	
+			strFormat(cmd, len, "+err@%s.enableraising(\"overflow\")\r\n", pRsrc->name);	
+			return 1;	
 		}
-		return 1;
+		pRsrc->enableRaising |= BIT(i);
+		strFormat(cmd, len, "+ok@%s.enableraising(0x%x)\r\n", pRsrc->name, pRsrc->enableRaising);
 	}
-	//%devName.enableRaising(indx0,indx1)
-	else if(isSameStr(packetIn->addr[1], "enableraising") && packetIsMatch(packetIn, "%s%s%u%u")){
-		i = *(u32*)packetIn->addr[2];
-		j = *(u32*)packetIn->addr[3];
-		if(i>16 || j>16)	RESPONSE(packetOut, ERR, (char*)pDev->rsrc.name, "enableraising", "%s", "param_err");
-		else{
-			pDev->rsrc.enableRaising |= 1U<<i;
-			pDev->rsrc.enableRaising |= 1U<<j;
-			RESPONSE(packetOut, OK, (char*)pDev->rsrc.name, "enableraising", "%x", pDev->rsrc.enableRaising);	
+	//"\n input.disableRaising(indx)/()"
+	else if(sscanf(line, ".disablefalling %d ", &i)==1){
+		if(i>=dev->rsrc.gpioLen){	
+			strFormat(cmd, len, "+err@%s.disableraising(\"overflow\")\r\n", pRsrc->name);	
+			return 1;	
 		}
-		return 1;
+		pRsrc->enableRaising &= 0xffff ^ BIT(i);
+		strFormat(cmd, len, "+ok@%s.disableraising(0x%x)\r\n", pRsrc->name, pRsrc->enableRaising);
 	}
-
-	//%devName.disableFalling()
-	else if(isSameStr(packetIn->addr[1], "disablefalling") && packetIsMatch(packetIn, "%s%s")){
-		pDev->rsrc.enableFalling = 0;
-		RESPONSE(packetOut, OK, (char*)pDev->rsrc.name, "disablefalling", "%x", pDev->rsrc.enableFalling);
-		return 1;
-	}
-	//%devName.disableFalling(indx0)
-	else if(isSameStr(packetIn->addr[1], "disablefalling") && packetIsMatch(packetIn, "%s%s%u")){
-		i = *(u32*)packetIn->addr[2];
-		if(i>16)	RESPONSE(packetOut, ERR, (char*)pDev->rsrc.name, "disablefalling", "%s", "param_err");
-		else{
-			pDev->rsrc.enableFalling &= 0xffff^(1U<<i);
-			RESPONSE(packetOut, OK, (char*)pDev->rsrc.name, "disablefalling", "%x", pDev->rsrc.enableFalling);			
-		}
-		return 1;
-	}
-	//%devName.disableFalling(indx0,indx1)
-	else if(isSameStr(packetIn->addr[1], "disablefalling") && packetIsMatch(packetIn, "%s%s%u%u")){
-		i = *(u32*)packetIn->addr[2];
-		j = *(u32*)packetIn->addr[3];
-		if(i>16 || j>16)	RESPONSE(packetOut, ERR, (char*)pDev->rsrc.name, "disablefalling", "%s", "param_err");
-		else{
-			pDev->rsrc.enableFalling &= 0xffff^(1U<<i);
-			pDev->rsrc.enableFalling &= 0xffff^(1U<<j);
-			RESPONSE(packetOut, OK, (char*)pDev->rsrc.name, "disablefalling", "%x", pDev->rsrc.enableFalling);			
-		}
-		return 1;
-	}
-	//%devName.disableRaising()
-	else if(isSameStr(packetIn->addr[1], "disablerasing") && packetIsMatch(packetIn, "%s%s")){
-		pDev->rsrc.enableRaising = 0;
-		RESPONSE(packetOut, OK, (char*)pDev->rsrc.name, "disablerasing", "%x", pDev->rsrc.enableRaising);
-		return 1;
-	}
-	//%devName.disableRaising(indx0)
-	else if(isSameStr(packetIn->addr[1], "disablerasing") && packetIsMatch(packetIn, "%s%s%u")){
-		i = *(u32*)packetIn->addr[2];
-		if(i>16)	RESPONSE(packetOut, ERR, (char*)pDev->rsrc.name, "disablerasing", "%s", "param_err");
-		else{
-			pDev->rsrc.enableRaising &= 0xffff^(1U<<i);
-			RESPONSE(packetOut, OK, (char*)pDev->rsrc.name, "disablerasing", "%x", pDev->rsrc.enableRaising);			
-		}
-		return 1;
-	}
-	//%devName.disableRaising(indx0,indx1)
-	else if(isSameStr(packetIn->addr[1], "disablerasing") && packetIsMatch(packetIn, "%s%s%u%u")){
-		i = *(u32*)packetIn->addr[2];
-		j = *(u32*)packetIn->addr[3];
-		if(i>16 || j>16)	RESPONSE(packetOut, ERR, (char*)pDev->rsrc.name, "disablerasing", "%s", "param_err");
-		else{
-			pDev->rsrc.enableRaising &= 0xffff^(1U<<i);
-			pDev->rsrc.enableRaising &= 0xffff^(1U<<j);
-			RESPONSE(packetOut, OK, (char*)pDev->rsrc.name, "disablerasing", "%x", pDev->rsrc.enableRaising);	
-		}
-		return 1;
-	}
-	else	RESPONSE_ORG(packetOut, "+err@", packetIn);
-	return 0;
-}
-
-void inputMakeEventMsg(PAKET_T *packetOut, const char* DevName, u8 pinIndx, INPUT_EVENT_T edge){
-	if(edge == INPUT_EVENT_FALLING)
-		RESPONSE(packetOut, MSG, DevName, "event", "%2d%s", pinIndx, "falling");
-	else if (edge == INPUT_EVENT_RAISING)
-		RESPONSE(packetOut, MSG, DevName, "event", "%2d%s", pinIndx, "raising");
+	
+	else	strFormat(cmd, len, "+err@%s",CMD);
+	
+	return 1;
 }
 
 /******************* (C) COPYRIGHT 2007 STMicroelectronics *****END OF FILE****/

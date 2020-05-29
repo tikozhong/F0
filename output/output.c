@@ -1,18 +1,20 @@
 #include "output.h"
-
+//#include "stdarg.h"
+#include "string.h"
+//#include "stdio.h"
 /* using external variables ---------------------------------------------------------*/
 
-const u8 REMAP[16] = {0,1,2,3,4,5,6,7,15,14,13,12,11,10,9,8};
-
+//const u8 REMAP[16] = {0,1,2,3,4,5,6,7,15,14,13,12,11,10,9,8};
+static void outputRename(OUTPUT_RSRC_T* pRsrc, const char* NAME);
 static void outputWritePinHEX(OUTPUT_RSRC_T* pRsrc, u16 hex);
 static void outputWritePin(OUTPUT_RSRC_T* pRsrc, u8 pin, OUTPUT_STATUS status);
 static void outputTogglePin(OUTPUT_RSRC_T* pRsrc, u8 pin);
-static void outputPolling(OUTPUT_RSRC_T* pRsrc);
 
-static s8 autoTogglePin (OUTPUT_RSRC_T* pRsrc, u8 pinIndx, u16 mSec);
-static s8 stopTogglePin (OUTPUT_RSRC_T* pRsrc, u8 pinIndx, u16 status);
+//static void outputPolling(OUTPUT_RSRC_T* pRsrc);
+//static s8 autoTogglePin (OUTPUT_RSRC_T* pRsrc, u8 pinIndx, u16 mSec);
+//static s8 stopTogglePin (OUTPUT_RSRC_T* pRsrc, u8 pinIndx, u16 status);
 
-static u16 remap(u16 x);
+//static u16 remap(u16 x);
 /*******************************************************************************
 * Function Name  : outputDevSetup
 * Description    : 
@@ -22,24 +24,37 @@ static u16 remap(u16 x);
 *******************************************************************************/
 DEV_STATUS outputDevSetup(
 	OUTPUT_DEV_T *pDev, 
-	PCA9539_Dev_T* pcaL,
-	PCA9539_Dev_T* pcaH,
-	u16 intiStatus
+	const PIN_T* gpio,
+	u8 gpioLen,
+	u16 initStatus,
+	s8 (*ioWrite)(u16 addr, u8 *pDat, u16 nBytes),
+	s8 (*ioRead)(u16 addr, u8 *pDat, u16 nBytes),
+	u16 eepromBase
 ){
-	u8 i;
-
-	pDev->rsrc.pca9539[0] = pcaL;
-	pDev->rsrc.pca9539[1] = pcaH;
-	for(i=0;i<32;i++)	pDev->rsrc.autoToggleTmr[i] = 0;
-	outputWritePinHEX(&pDev->rsrc, intiStatus);
+	u8 name[DEV_NAME_LEN+1] = {0};
+	u8 i,checkcode;
+	
+	OUTPUT_RSRC_T* pRsrc = &pDev->rsrc;
+	pRsrc->gpio = gpio;
+	pRsrc->gpioLen = gpioLen;
+	outputWritePinHEX(pRsrc, initStatus);
+	pRsrc->status = initStatus;
+	pRsrc->ioWrite = ioWrite;
+	pRsrc->ioRead = ioRead;
+	pRsrc->eepromBase = eepromBase;
+	
+	//read devname from eeprom
+	pRsrc->ioRead(pRsrc->eepromBase, name, DEV_NAME_LEN+1);
+	checkcode = 0xca;
+	for(i=0;i<DEV_NAME_LEN;i++)	checkcode ^= name[i];
+	if(checkcode == name[DEV_NAME_LEN])	memcpy(pRsrc->name, name, DEV_NAME_LEN);
+	else{	outputRename(pRsrc, "output");	}
+	
 	pDev->WritePinHEX = outputWritePinHEX;
 	pDev->WritePin = outputWritePin;
 	pDev->TogglePin = outputTogglePin;
-	pDev->AutoTogglePin = autoTogglePin;
-	pDev->StopTogglePin = stopTogglePin;
-	pDev->Polling = outputPolling;
-	pDev->rsrc.status = intiStatus;
-	outputWritePinHEX(&pDev->rsrc, pDev->rsrc.status);
+	pDev->Rename = outputRename;
+
 	return DEV_SUCCESS;
 }
 
@@ -50,23 +65,23 @@ DEV_STATUS outputDevSetup(
 * Output         : None
 * Return         : None
 *******************************************************************************/
-#define MAX_TOGGLE_TMR  60000 
-static void outputPolling(OUTPUT_RSRC_T* pRsrc){
-	u8 i;
-	u16 tmp = pRsrc->status;
-	//auto toggle
-	for(i=0;i<16;i++){
-		if(pRsrc->autoToggleTmr[i] == 0)	continue;
-		pRsrc->autoToggleTick[i] += OUTPUT_POLLING_TIME;
-		if(pRsrc->autoToggleTick[i] > pRsrc->autoToggleTmr[i]){
-			pRsrc->autoToggleTick[i] = 0;
-			tmp ^= (1U<<i);
-		}
-		else if(pRsrc->autoToggleTick[i] > MAX_TOGGLE_TMR)
-			pRsrc->autoToggleTick[i] = MAX_TOGGLE_TMR;
-	}
-	if(tmp^pRsrc->status)	outputWritePinHEX(pRsrc, tmp);
-}
+//#define MAX_TOGGLE_TMR  60000 
+//static void outputPolling(OUTPUT_RSRC_T* pRsrc){
+//	u8 i;
+//	u16 tmp = pRsrc->status;
+//	//auto toggle
+//	for(i=0;i<16;i++){
+//		if(pRsrc->autoToggleTmr[i] == 0)	continue;
+//		pRsrc->autoToggleTick[i] += OUTPUT_POLLING_TIME;
+//		if(pRsrc->autoToggleTick[i] > pRsrc->autoToggleTmr[i]){
+//			pRsrc->autoToggleTick[i] = 0;
+//			tmp ^= (1U<<i);
+//		}
+//		else if(pRsrc->autoToggleTick[i] > MAX_TOGGLE_TMR)
+//			pRsrc->autoToggleTick[i] = MAX_TOGGLE_TMR;
+//	}
+//	if(tmp^pRsrc->status)	outputWritePinHEX(pRsrc, tmp);
+//}
 
 /*******************************************************************************
 * Function Name  : outputWritePinHEX
@@ -76,15 +91,11 @@ static void outputPolling(OUTPUT_RSRC_T* pRsrc){
 * Return         : None
 *******************************************************************************/
 static void outputWritePinHEX(OUTPUT_RSRC_T* pRsrc, u16 hex){
-	u16 buf;
-	u8 dat;
-	//remap
-	buf = remap(hex);
-	//shift
-	dat = buf;
-	pRsrc->pca9539[0]->WriteReg(&pRsrc->pca9539[0]->rsrc, 0x03, &dat, 1);	NOP();	NOP();	NOP();
-	dat = buf >> 8;
-	pRsrc->pca9539[1]->WriteReg(&pRsrc->pca9539[1]->rsrc, 0x03, &dat, 1);	
+	u8 i;
+	for(i=0;i<pRsrc->gpioLen;i++){
+		if(hex & BIT(i))	HAL_GPIO_WritePin(pRsrc->gpio[i].GPIOx, pRsrc->gpio[i].GPIO_Pin, GPIO_PIN_SET);
+		else	HAL_GPIO_WritePin(pRsrc->gpio[i].GPIOx, pRsrc->gpio[i].GPIO_Pin, GPIO_PIN_RESET);
+	}
 	pRsrc->status = hex;
 }
 
@@ -95,32 +106,16 @@ static void outputWritePinHEX(OUTPUT_RSRC_T* pRsrc, u16 hex){
 * Output         : None
 * Return         : None
 *******************************************************************************/
-static void outputWritePin(OUTPUT_RSRC_T* pRsrc, u8 pin, OUTPUT_STATUS status){
-	u16 tmp,buf;
-	u8 dat;
-
-	if(pin>=16)	return;
-	tmp = pRsrc->status & ((1U<<pin)^0xffff);
-	if(status)	tmp |= (1U<<pin);
-	
-	//remap
-	buf = remap(tmp);
-	//shift
-//     dat = tmp;
-//     pRsrc->pca9539[0]->WriteReg(&pRsrc->pca9539[0]->rsrc, 0x03,	&dat, 1);
-//     dat = tmp>>8;
-//     pRsrc->pca9539[1]->WriteReg(&pRsrc->pca9539[1]->rsrc, 0x03,	&dat, 1);
-     
-	if(pin<8){
-		dat = buf;
-		pRsrc->pca9539[0]->WriteReg(&pRsrc->pca9539[0]->rsrc, 0x03,	&dat, 1);
+static void outputWritePin(OUTPUT_RSRC_T* pRsrc, u8 pin, OUTPUT_STATUS level){
+	if(pin >= pRsrc->gpioLen)	return;
+	if(level){
+		HAL_GPIO_WritePin(pRsrc->gpio[pin].GPIOx, pRsrc->gpio[pin].GPIO_Pin, GPIO_PIN_SET);
+		pRsrc->status |= BIT(pin);
 	}
 	else{
-		dat = buf>>8;
-		pRsrc->pca9539[1]->WriteReg(&pRsrc->pca9539[1]->rsrc, 0x03,	&dat, 1);
+		HAL_GPIO_WritePin(pRsrc->gpio[pin].GPIOx, pRsrc->gpio[pin].GPIO_Pin, GPIO_PIN_RESET);
+		pRsrc->status &= (0xffffffff^BIT(pin));
 	}
-     
-	pRsrc->status = tmp;
 }
 
 /*******************************************************************************
@@ -131,14 +126,31 @@ static void outputWritePin(OUTPUT_RSRC_T* pRsrc, u8 pin, OUTPUT_STATUS status){
 * Return         : None
 *******************************************************************************/
 static void outputTogglePin(OUTPUT_RSRC_T* pRsrc, u8 pin){
-	if(pin==255){
-		pRsrc->status ^= 0xffff;
-		outputWritePinHEX(pRsrc, pRsrc->status);
+	if(pin >= pRsrc->gpioLen)	return;
+	if(pRsrc->status & BIT(pin)){
+		HAL_GPIO_WritePin(pRsrc->gpio[pin].GPIOx, pRsrc->gpio[pin].GPIO_Pin, GPIO_PIN_RESET);
+		pRsrc->status &= (0xffffffff^BIT(pin));
 	}
-	else if(pin<16){
-		pRsrc->status ^= (1U<<pin);
-		outputWritePinHEX(pRsrc, pRsrc->status);
+	else{
+		HAL_GPIO_WritePin(pRsrc->gpio[pin].GPIOx, pRsrc->gpio[pin].GPIO_Pin, GPIO_PIN_SET);	
+		pRsrc->status |= BIT(pin);
 	}
+}
+
+/*******************************************************************************
+* Function Name  : outputRename
+* Description    : to toggle pin
+* Input          : None
+* Output         : None
+* Return         : None
+*******************************************************************************/
+static void outputRename(OUTPUT_RSRC_T* pRsrc, const char* NAME){
+	u8 name[DEV_NAME_LEN+1],i;
+	devRename(pRsrc->name, NAME);
+	memcpy(name, pRsrc->name, DEV_NAME_LEN);
+	name[DEV_NAME_LEN] = 0xca;
+	for(i=0;i<DEV_NAME_LEN;i++)	name[DEV_NAME_LEN] ^= name[i];
+	pRsrc->ioWrite(pRsrc->eepromBase, name, DEV_NAME_LEN+1);
 }
 
 /*******************************************************************************
@@ -148,23 +160,23 @@ static void outputTogglePin(OUTPUT_RSRC_T* pRsrc, u8 pin){
 * Output         : None
 * Return         : None
 *******************************************************************************/
-static s8 autoTogglePin (OUTPUT_RSRC_T* pRsrc, u8 pinIndx, u16 msec){
-	u8 i;
+//static s8 autoTogglePin (OUTPUT_RSRC_T* pRsrc, u8 pinIndx, u16 msec){
+//	u8 i;
 
-	if(pinIndx == 0xff){
-		for(i=0;i<32;i++){
-			pRsrc->autoToggleTmr[i] = msec;
-			pRsrc->autoToggleTick[i] = 0;
-		}
-		return 0;
-	}
-	else if(pinIndx<32){
-		pRsrc->autoToggleTmr[pinIndx] = msec;
-		pRsrc->autoToggleTick[pinIndx] = 0;
-		return 1;
-	}
-	else return -1;
-}
+//	if(pinIndx == 0xff){
+//		for(i=0;i<32;i++){
+//			pRsrc->autoToggleTmr[i] = msec;
+//			pRsrc->autoToggleTick[i] = 0;
+//		}
+//		return 0;
+//	}
+//	else if(pinIndx<32){
+//		pRsrc->autoToggleTmr[pinIndx] = msec;
+//		pRsrc->autoToggleTick[pinIndx] = 0;
+//		return 1;
+//	}
+//	else return -1;
+//}
 
 /*******************************************************************************
 * Function Name  : stopTogglePin
@@ -173,32 +185,32 @@ static s8 autoTogglePin (OUTPUT_RSRC_T* pRsrc, u8 pinIndx, u16 msec){
 * Output         : None
 * Return         : None
 *******************************************************************************/
-static s8 stopTogglePin (OUTPUT_RSRC_T* pRsrc, u8 pinIndx, u16 status){
-	u8 i;
+//static s8 stopTogglePin (OUTPUT_RSRC_T* pRsrc, u8 pinIndx, u16 status){
+//	u8 i;
 
-	if(pinIndx == 0xff){
-		for(i=0;i<32;i++)
-			pRsrc->autoToggleTmr[i] = 0;
-		outputWritePinHEX(pRsrc, status);
-		return 0;
-	}
-	else if(pinIndx<32){
-		pRsrc->autoToggleTmr[pinIndx] = 0;
-		if(status==0)	outputWritePin(pRsrc, pinIndx, PIN_RESET);
-		else	outputWritePin(pRsrc, pinIndx, PIN_SET);
-		return 1;
-	}
-	else return -1;
-}
+//	if(pinIndx == 0xff){
+//		for(i=0;i<32;i++)
+//			pRsrc->autoToggleTmr[i] = 0;
+//		outputWritePinHEX(pRsrc, status);
+//		return 0;
+//	}
+//	else if(pinIndx<32){
+//		pRsrc->autoToggleTmr[pinIndx] = 0;
+//		if(status==0)	outputWritePin(pRsrc, pinIndx, PIN_RESET);
+//		else	outputWritePin(pRsrc, pinIndx, PIN_SET);
+//		return 1;
+//	}
+//	else return -1;
+//}
 
-static u16 remap(u16 x){
-	u8 i;
-	u16 buf = 0;	
-	//remap
-	for(i=0;i<16;i++){
-		if(x & (1U<<i))	buf |= (1U<<REMAP[i]);
-	}
-	return buf;
-}
+//static u16 remap(u16 x){
+//	u8 i;
+//	u16 buf = 0;	
+//	//remap
+//	for(i=0;i<16;i++){
+//		if(x & (1U<<i))	buf |= (1U<<REMAP[i]);
+//	}
+//	return buf;
+//}
 
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

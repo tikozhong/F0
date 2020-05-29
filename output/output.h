@@ -6,7 +6,7 @@ filename: output.h
 #ifndef _OUTPUT_H
 #define _OUTPUT_H
 
-#include "pca9539.h"
+#include "misc.h"
 
 #define OUTPUT_POLLING_TIME 16
 
@@ -17,28 +17,34 @@ typedef enum{
 
 typedef struct {
 	char name[DEV_NAME_LEN];
-	PCA9539_Dev_T* pca9539[2];
+	const PIN_T* gpio;
+	u8 gpioLen;
 	u16 status;
-	u16 autoToggleTick[32];
-	u16 autoToggleTmr[32];
+	s8 (*ioWrite)(u16 addr, u8 *pDat, u16 nBytes);
+	s8 (*ioRead)(u16 addr, u8 *pDat, u16 nBytes);
+	u16 eepromBase;
 } OUTPUT_RSRC_T;
 
 typedef struct {	
 	OUTPUT_RSRC_T rsrc;
+	void (*Rename)(OUTPUT_RSRC_T* pRsrc, const char* NAME);
 	void (*WritePinHEX)(OUTPUT_RSRC_T* pRsrc, u16 pinStatus);
-	void (*WritePin)(OUTPUT_RSRC_T* pRsrc, u8 pinIndx, OUTPUT_STATUS status);
+	void (*WritePin)(OUTPUT_RSRC_T* pRsrc, u8 pinIndx, OUTPUT_STATUS level);
 	void (*TogglePin)(OUTPUT_RSRC_T* pRsrc, u8 pinIndx);
-	s8 (*AutoTogglePin) (OUTPUT_RSRC_T* pRsrc, u8 pinIndx, u16 mSec);
-	s8 (*StopTogglePin) (OUTPUT_RSRC_T* pRsrc, u8 pinIndx, u16 status);
-	void (*Polling)(OUTPUT_RSRC_T *pRsrc);
+//	s8 (*AutoTogglePin) (OUTPUT_RSRC_T* pRsrc, u8 pinIndx, u16 mSec);
+//	s8 (*StopTogglePin) (OUTPUT_RSRC_T* pRsrc, u8 pinIndx, u16 status);
+//	void (*Polling)(OUTPUT_RSRC_T *pRsrc);
 }OUTPUT_DEV_T;
 
 /* output variables for extern function --------------------------------------*/
 DEV_STATUS outputDevSetup(
 	OUTPUT_DEV_T *pDev, 
-	PCA9539_Dev_T* pcaL,
-	PCA9539_Dev_T* pcaH,
-	u16 intiStatus
+	const PIN_T* gpio,
+	u8 gpioLen,
+	u16 initStatus,
+	s8 (*ioWrite)(u16 addr, u8 *pDat, u16 nBytes),
+	s8 (*ioRead)(u16 addr, u8 *pDat, u16 nBytes),
+	u16 eepromBase
 );
 #endif
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

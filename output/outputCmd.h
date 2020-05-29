@@ -13,9 +13,10 @@
 #ifndef _OUTPUT_CMD_H
 #define _OUTPUT_CMD_H
 
-/* Includes ------------------------------------------------------------------*/
-#include "publicRsrc.h"
+#include "misc.h"
 #include "output.h"
+
+/* Includes ------------------------------------------------------------------*/
 /* Exported types ------------------------------------------------------------*/
 /* Exported constants --------------------------------------------------------*/
 /* Exported macro ------------------------------------------------------------*/
@@ -23,7 +24,9 @@
 extern const char OUTPUT_HELP[];
 //void outputCmdHelp(UART_DEV *huartDev);
 //void outputReport(OUTPUT_DEV_T *pDev, const u8* RtpNo);
-u8 outputCmd(OUTPUT_DEV_T *pDev, PAKET_T *packetIn, PAKET_T *packetOut);
+//u8 outputCmd(PIN_T *gpio, u8 gpioLen, const char* CMD, char* cmd, u8 cmdLen);
+u8 outputCmd(OUTPUT_DEV_T* pDev, char* cmd, u16 len, const char* CMD);
+
 #endif /* _OUTPUT_CMD_H */
 
 /******************* (C) COPYRIGHT 2015 INCUBECN *****END OF FILE****/

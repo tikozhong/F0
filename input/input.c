@@ -4,24 +4,42 @@
 /**********************************************************
  private function
 **********************************************************/
-static void inputFetch(INPUT_RSRC_T* pRsrc);
+static void inputRename(INPUT_RSRC_T* pRsrc, const char* NAME);
+static void inputPolling(INPUT_RSRC_T* pRsrc, u8 tick);
 static s8 inputReadPin(INPUT_RSRC_T* pRsrc, u8 pin);
 /**********************************************************
  public function
 **********************************************************/
-DEV_STATUS InputDevSetup(
+void InputDevSetup(
 	INPUT_DEV_T *pDev, 
-	PCA9539_Dev_T* pcaL,
-	PCA9539_Dev_T* pcaH
+	const PIN_T *gpio, u8 gpioLen,
+	s8 (*ioWrite)(u16 addr, u8 *pDat, u16 nBytes),
+	s8 (*ioRead)(u16 addr, u8 *pDat, u16 nBytes),
+	u16 eepromBase
 ){
+	u8 name[DEV_NAME_LEN+1] = {0};
+	u8 i,checkcode;	
 	INPUT_RSRC_T *pRsrc = &pDev->rsrc;
+	
 	memset(pRsrc, 0, sizeof(INPUT_RSRC_T));
-	pRsrc->pca9539[0] = pcaL;
-	pRsrc->pca9539[1] = pcaH;
-	pRsrc->status = 0xffff;
-	pDev->Fetch = inputFetch;
+	pRsrc->PIN = gpio;
+	pRsrc->gpioLen = gpioLen;
+	pRsrc->status[0] = 0xffffffff;
+	pRsrc->status[1] = 0xffffffff;
+	pRsrc->ioRead = ioRead;
+	pRsrc->ioWrite = ioWrite;
+	pRsrc->eepromBase = eepromBase;
+
+	//read devname from eeprom
+	pRsrc->ioRead(pRsrc->eepromBase, name, DEV_NAME_LEN+1);
+	checkcode = 0xca;
+	for(i=0;i<DEV_NAME_LEN;i++)	checkcode ^= name[i];
+	if(checkcode == name[DEV_NAME_LEN]){	memcpy(pRsrc->name, name, DEV_NAME_LEN);	}
+	else{		inputRename(pRsrc, "input");	}
+
+	pDev->Rename = inputRename;
+	pDev->Polling = inputPolling;
 	pDev->ReadPin = inputReadPin;
-	return DEV_SUCCESS;
 }
 
 /*******************************************************************************
@@ -31,44 +49,20 @@ DEV_STATUS InputDevSetup(
 * Output         : None
 * Return         : None
 *******************************************************************************/
-static void inputFetch(INPUT_RSRC_T* pRsrc){
-	u8 i,j,k;	u32 edge;
-	PCA9539_Dev_T* pca9539;
-	
-	pca9539 = pRsrc->pca9539[0];
-	pca9539->ReadReg(&pca9539->rsrc, 0, &i, 1);	
-	pca9539 = pRsrc->pca9539[1];
-	pca9539->ReadReg(&pca9539->rsrc, 0, &j, 1);
-	//shift in ram
-	for(k=0;k<8;k++){
-		pRsrc->series[k] <<= 1;
-		if(i&0x01)	pRsrc->series[k] |= 0x00000001;
-		i >>= 1;
-	}
-	for(k=8;k<16;k++){
-		pRsrc->series[k] <<= 1;
-		if(j&0x01)	pRsrc->series[k] |= 0x00000001;
-		j >>= 1;
-	}
-
-	//update status and generate callback msg
-	pRsrc->fallingEvt = 0;
-	pRsrc->raisingEvt = 0;
-	for(i=0; i<16; i++)	{
-		//make all inputs' statue in 32-bit
-		if((pRsrc->series[i]&0x0000000f) == 0)	pRsrc->status &= (1U<<i)^0xffff;
-		else if((pRsrc->series[i]&0x0000000f) == 0x0f)	pRsrc->status |= 1U<<i;
-		//deal with edge event
-		edge = pRsrc->series[i];
-		edge &= 0xf00f;
-		if((edge == 0xf000) && (pRsrc->enableFalling & (1U<<i))){
-			pRsrc->fallingEvt |= 1U<<i;
-			pRsrc->series[i] &= 0xfffff000;	//in case of one event responsing two times
-		}
-		if((edge == 0x000f) && (pRsrc->enableRaising & (1U<<i))){
-			pRsrc->raisingEvt |= 1U<<i;
-			pRsrc->series[i] |= 0x0000ffff;	//in case of one event responsing two times
-		}
+static void inputPolling(INPUT_RSRC_T* pRsrc, u8 tick){
+	u8 i;
+	pRsrc->tick += tick;
+	if(pRsrc->tick < 20)	return;
+	pRsrc->tick = 0;
+	pRsrc->status[1] = pRsrc->status[0];
+	pRsrc->status[0] = 0xffffffff;
+	for(i=0;i<pRsrc->gpioLen;i++){
+		if(HAL_GPIO_ReadPin(pRsrc->PIN[i].GPIOx, pRsrc->PIN[i].GPIO_Pin) == GPIO_PIN_RESET)
+			pRsrc->status[0] &= (0xffffffff^BIT(i));
+		if((pRsrc->status[1]&BIT(i))>0 && (pRsrc->status[0]&BIT(i))==0){
+			if((pRsrc->enableFalling & BIT(i)) && pRsrc->fallingCallback!=NULL)	pRsrc->fallingCallback(i);	}
+		else if((pRsrc->status[1]&BIT(i))==0 && (pRsrc->status[0]&BIT(i))>0){
+			if((pRsrc->enableRaising & BIT(i)) && pRsrc->raisingCallback!=NULL)	pRsrc->raisingCallback(i);	}
 	}
 }
 
@@ -76,12 +70,23 @@ static void inputFetch(INPUT_RSRC_T* pRsrc){
 * Function Name  : InputReadPin
 * Description    : all sample 
 * Input          : None
-* Output         : 0: low, 1:high	2:shaking
+* Output         : 0: low(turn on), 1:high	2:shaking
 * Return         : None
 *******************************************************************************/
 static s8 inputReadPin(INPUT_RSRC_T* pRsrc, u8 pin){
-	if(pRsrc->status & (1U<<pin))	return 1;
+	if(pin>=pRsrc->gpioLen)	return 1;
+	if(pRsrc->status[0] & BIT(pin))	return 1;
 	else return 0;
 }
 
+static void inputRename(INPUT_RSRC_T* pRsrc, const char* NAME){
+	u8 name[DEV_NAME_LEN+1],i;
+	devRename(pRsrc->name, NAME);
+	memcpy(name, pRsrc->name, DEV_NAME_LEN);
+	name[DEV_NAME_LEN] = 0xca;
+	for(i=0;i<DEV_NAME_LEN;i++)	name[DEV_NAME_LEN] ^= name[i];
+	pRsrc->ioWrite(pRsrc->eepromBase, name, DEV_NAME_LEN+1);
+}
+
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
+

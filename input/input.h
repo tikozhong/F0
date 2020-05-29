@@ -6,30 +6,36 @@ filename: input.h
 #ifndef _INPUT_H
 #define _INPUT_H
 
-#include "pca9539.h"
+#include "misc.h"
 
 typedef struct {
+	const PIN_T *PIN; u8 gpioLen;
 	char name[DEV_NAME_LEN];
-	PCA9539_Dev_T* pca9539[2];
-	u16 status;
-	u32 series[16];
-	u16 enableFalling;
-	u16 enableRaising;
-	u16 fallingEvt;
-	u16 raisingEvt;
+	u32 status[2];
+	u32 enableFalling;
+	u32 enableRaising;
+	void (*fallingCallback)(u8 indx);
+	void (*raisingCallback)(u8 indx);
+	u16 tick;
+	s8 (*ioWrite)(u16 addr, u8 *pDat, u16 nBytes);
+	s8 (*ioRead)(u16 addr, u8 *pDat, u16 nBytes);
+	u16 eepromBase;	
 } INPUT_RSRC_T;
 
 typedef struct {
 	INPUT_RSRC_T rsrc;
-	void (*Fetch) (INPUT_RSRC_T* pRsrc);
+	void (*Polling) (INPUT_RSRC_T* pRsrc, u8 tick);
 	s8 (*ReadPin)	(INPUT_RSRC_T* pRsrc, u8 pin);
+	void (*Rename)(INPUT_RSRC_T* pRsrc, const char* NAME);
 }INPUT_DEV_T;
 
 /* output variables for extern function --------------------------------------*/
-DEV_STATUS InputDevSetup(
+void InputDevSetup(
 	INPUT_DEV_T *pDev, 
-	PCA9539_Dev_T* pcaL,
-	PCA9539_Dev_T* pcaH
+	const PIN_T *gpio, u8 gpioLen,
+	s8 (*ioWrite)(u16 addr, u8 *pDat, u16 nBytes),
+	s8 (*ioRead)(u16 addr, u8 *pDat, u16 nBytes),
+	u16 eepromBase
 );
 
 #endif

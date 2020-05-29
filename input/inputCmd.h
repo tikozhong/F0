@@ -14,8 +14,7 @@
 #define _INPUT_CMD_H
 
 /* Includes ------------------------------------------------------------------*/
-//#include "misc.h"
-#include "publicRsrc.h"
+#include "misc.h"
 #include "input.h"
 
 /* Exported types ------------------------------------------------------------*/
@@ -29,8 +28,8 @@ typedef enum{
 extern const char INPUT_HELP[];
 
 /* Exported functions ------------------------------------------------------- */
-u8 inputCmd(INPUT_DEV_T *pDev, PAKET_T *packetIn, PAKET_T *packetOut);
-void inputMakeEventMsg(PAKET_T *packetOut, const char* DevName, u8 pinIndx, INPUT_EVENT_T edge);
+u8 inputCmd(INPUT_DEV_T *dev, char* cmd, u16 len, const char* CMD);
+
 #endif /* _INPUT_CMD_H */
 
 /******************* (C) COPYRIGHT 2015 INCUBECN *****END OF FILE****/

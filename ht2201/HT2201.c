@@ -16,7 +16,7 @@ filename: TM1638.c
 static void ht2201Write(HT2201Rsrc_T *pRsrc, u8 addr, u8* pBuf, u8 len);
 static void ht2201Read(HT2201Rsrc_T *pRsrc, u8 addr, u8* pBuf, u8 len);
 static void ht2201WritePage(HT2201Rsrc_T *pRsrc, u8 addr, u8* pBuf, u8 len);
-static void ht2201DelayMs256(u8);
+
 /**********************************************************
  Public function
 **********************************************************/
@@ -76,7 +76,6 @@ static void ht2201Read(HT2201Rsrc_T *pRsrc, u8 addr, u8* pBuf, u8 len){
 	}
 	//stop
 	pI2cDev->Stop(pI2cRsrc);
-	ht2201DelayMs256(6);
 }
 
 /**********************************************************
@@ -119,7 +118,7 @@ static void ht2201WritePage(HT2201Rsrc_T *pRsrc, u8 addr, u8* pBuf, u8 len){
 	//stop
 	pI2cDev->Stop(pI2cRsrc);
 	//wait twr=5ms
-	ht2201DelayMs256(6);
+	HAL_Delay(5);
 }
 static void ht2201Write(HT2201Rsrc_T *pRsrc, u8 addr, u8* pBuf, u8 len){
 	u8 j,k,firstLen;
@@ -143,11 +142,6 @@ static void ht2201Write(HT2201Rsrc_T *pRsrc, u8 addr, u8* pBuf, u8 len){
 	}
 }
 
-static void ht2201DelayMs256(u8 ms){
-	u32 i;
-	for(i=0;i<ms*1000;i++)
-		miscDelay(200);
-}
 /**********************************************************
  == THE END ==
 **********************************************************/

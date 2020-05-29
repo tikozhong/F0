@@ -24,20 +24,22 @@ typedef struct{
 	u16 rxPoolLen, rxBufLen;
 	u16 rxPoolIndx;
 	//tx parameter
-	u8 *txPool, *txBuf;
-	u16 txPoolLen, txBufLen;
-	u16 txPoolIndx;
+	u8 *txBuf;
+	u16 txIndx;
+	u16 txBufLen;
+	//callback
+	void (*beforeSend)(void);
+	void (*afterSend)(void);
 }UartRsrc_t;
 
 typedef struct{
 	UartRsrc_t rsrc;
-	void (*RxReset)		(UartRsrc_t *pRsrc);
 	u8 (*RxMonitor)		(UartRsrc_t *pRsrc);
 	u8 (*RxFetchLine)	(UartRsrc_t *pRsrc, char* line, u16 len);
-	void (*TxMonitor)	(UartRsrc_t *pRsrc);
-	u16 (*TxSend)		(UartRsrc_t *pRsrc, const u8* BUF, u16 len);	
+	u8* (*RxFetchFrame)	(UartRsrc_t *pRsrc, u16* len);
+	u16 (*TxSend)		(UartRsrc_t *pRsrc, const u8* BUF, u16 len);
+	u16 (*TxSendFrame)	(UartRsrc_t *pRsrc, const u8* BUF, u16 len);
 }UartDev_t;
-
 
 /* Exported variables --------------------------------------------------------*/
 //extern u8 rxBufIndx;
@@ -49,9 +51,8 @@ void setupUartDev(
 	UART_HandleTypeDef* huart,
 	u8* p,	/*	all memmory	*/
 	u16	rxPoolLen,
-	u8 rxBufLen,
-	u16 txPoolLen,
-	u8 txBufLen
+	u16 rxBufLen,
+	u16 txBufLen
 );
 
 #endif /* _MY_UART_H */

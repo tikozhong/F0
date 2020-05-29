@@ -1,5 +1,5 @@
 /******************** (C) COPYRIGHT 2015 INCUBECN *****************************
-* File Name          : inputCmd.c
+* File Name          : outputCmd.c
 * Author             : Tiko Zhong
 * Date First Issued  : 12/01/2015
 * Description        : This file provides a set of functions needed to manage the
@@ -7,7 +7,12 @@
 *******************************************************************************/
 /* Includes ------------------------------------------------------------------*/
 #include "outputCmd.h"
-#include "responseX.h"
+#include "string.h"
+#include "stdarg.h"
+#include "string.h"
+#include "stdio.h"
+#include "stdlib.h"
+
 /* Private typedef -----------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
 #define FUN_LEN 64
@@ -15,30 +20,14 @@
 /* Private variables ---------------------------------------------------------*/
 const char OUTPUT_HELP[] = {
 	"output commands:"
-	"\n output.help()"
-	"\n output.readPin()/(indx)/(indx0,indx1)"
-	"\n output.writePin(status)/(indx, b)/(indx0,bit0,indx1,bit1)"
-	"\n output.togglePin()/(indx)/(indx0,indx1)"
-	"\n output.runPin(indx,ms)/(ms)"
-	"\n output.stopPin()/(status)/(indx,b)\r\n"
+	"\n dev.help()"
+	"\n dev.rename()"
+	"\n dev.readPin()/(indx)/(indx0,indx1)"
+	"\n dev.writePin(status)/(indx, b)/(indx0,bit0,indx1,bit1)"
+	"\n dev.togglePin()/(indx)/(indx0,indx1)"
 };
 
 /* Private function prototypes -----------------------------------------------*/
-
-/*******************************************************************************
-* Function Name  : outputReport
-* Description    : auto report
-* Input          : - huart : using this uart to print
-									: - cmdStr : the command string
-* Output         : None
-* Return         : None 
-*******************************************************************************/
-//void outputReport(UART_DEV *huartDev, OUTPUT_DEV_T *pDev, const u8* RtpNo){
-//	if(pDev->rsrc.flags&(1<<OUTPUT_REPORT)){
-//		huartDev->PrintStr(&huartDev->Rsrc, RtpNo);
-//		outputCmd(huartDev, "output.readpin(*)\r\n", pDev);
-//	}
-//}
 
 /*******************************************************************************
 * Function Name  : outputCmd
@@ -48,136 +37,98 @@ const char OUTPUT_HELP[] = {
 * Output         : None
 * Return         : None 
 
-output.writepin(%pin,%state)
+output.writepin(%pin, %state)
 output.toggle(%pin)
 *******************************************************************************/
-u8 outputCmd(OUTPUT_DEV_T *pDev, PAKET_T *packetIn, PAKET_T *packetOut){
+u8 outputCmd(OUTPUT_DEV_T* pDev, char* cmd, u16 len, const char* CMD){
 	u32 i,j,ii,jj;
+	const char* line;
+	char name[16] = {0};
+	OUTPUT_RSRC_T *pRsrc = &pDev->rsrc;
+		
+	if(strncmp(CMD, pRsrc->name, strlen(pRsrc->name)) != 0)	return 0;
+	
+	line = &CMD[strlen(pRsrc->name)];
+	
+	if(strncmp(line, ".help  ", strlen(".help  ")) == 0)	strFormat(cmd, len, OUTPUT_HELP);
 
-	packetReset(packetOut);
-	packetSetStyle(packetOut, PAKET_STYLE_CPP);
-	//%devName.help()
-	if(isSameStr(packetIn->addr[1], "help") && packetIsMatch(packetIn, "%s%s")){
-		RESPONSE_ORG(packetOut, OK, packetIn);
-		printS(OUTPUT_HELP);
-		return 1;
+	//.rename
+	else if(sscanf(line, ".rename %s ", name)==1){
+		strFormat(cmd, len, "+ok@%s.rename(\"%s\")\r\n", pRsrc->name, name);
+		pDev->Rename(&pDev->rsrc, name);
 	}
-	//%devName.readpin()
-	else if(isSameStr(packetIn->addr[1], "readpin") && packetIsMatch(packetIn, "%s%s")){
-		RESPONSE(packetOut, OK, (char*)pDev->rsrc.name, "readpin", "%x", pDev->rsrc.status);
-		return 1;
-	}
-	//%devName.readpin(indx)
-	else if(isSameStr(packetIn->addr[1], "readpin") && packetIsMatch(packetIn, "%s%s%u")){
-		i = *(u32*)packetIn->addr[2];
-		if(i>16)	RESPONSE(packetOut, ERR, (char*)pDev->rsrc.name, "readpin", "%s", "param_err");
-		else{
-			j = 0x01 & (pDev->rsrc.status>>i);
-			RESPONSE(packetOut, OK, (char*)pDev->rsrc.name, "readpin", "%2d%d", i,j);
+	//output.readPin()/(indx)/(indx0,indx1)
+	else if(sscanf(line, ".readpin %d %d ", &i, &j)==2){
+		if(i>=pRsrc->gpioLen || j>=pRsrc->gpioLen){	
+			strFormat(cmd, len, "+err@%s.readpin(\"overflow\")\r\n", pRsrc->name);	
+			return 1;	
 		}
-		return 1;
+		ii = 0;	jj = 0;
+		if(pRsrc->status & BIT(i))	ii = 1;
+		if(pRsrc->status & BIT(j))	jj = 1;
+		strFormat(cmd, len, "+ok@%s.readpin(%d,%d,%d,%d)\r\n", pRsrc->name, i, ii, j, jj);
 	}
-	//%devName.readpin(indx1,indx2)
-	else if(isSameStr(packetIn->addr[1], "readpin") && packetIsMatch(packetIn, "%s%s%u%u")){
-		i = *(u32*)packetIn->addr[2];
-		j = *(u32*)packetIn->addr[3];
-		if(i>16 || j>16)	RESPONSE(packetOut, ERR, (char*)pDev->rsrc.name, "readpin", "%s", "param_err");
-		else{
-			ii = 0x01 & (pDev->rsrc.status >> i);
-			jj = 0x01 & (pDev->rsrc.status >> j);
-			RESPONSE(packetOut, OK, (char*)pDev->rsrc.name, "readpin", "%2d%d%2d%d", i,ii,j,jj);
-		}
-		return 1;
+	else if(sscanf(line, ".readpin %d ", &i)==1){
+		if(i>=pRsrc->gpioLen){	strFormat(cmd, len, "+err@%s.readpin(\"overflow\")\r\n", pRsrc->name);	return 1;	}
+		ii = 0;	
+		if(pRsrc->status & BIT(i))	ii = 1;
+		strFormat(cmd, len, "+ok@%s.readpin(%d,%d)\r\n", pRsrc->name, i, ii);
 	}
-
-	//%devName.writepin(status)
-	else if(isSameStr(packetIn->addr[1], "writepin") && packetIsMatch(packetIn, "%s%s%u")){
-		i = *(u32*)packetIn->addr[2];
-		pDev->WritePinHEX(&pDev->rsrc, i);
-		RESPONSE(packetOut, OK, (char*)pDev->rsrc.name, "writepin", "%x", i);
-		return 1;
-	}
-	//%devName.writepin(indx1,status)
-	else if(isSameStr(packetIn->addr[1], "writepin") && packetIsMatch(packetIn, "%s%s%u%u")){
-		i = *(u32*)packetIn->addr[2];
-		j = *(u32*)packetIn->addr[3];
-		if(i>16 || j>16)	RESPONSE(packetOut, ERR, (char*)pDev->rsrc.name, "writepin", "%s", "param_err");
-		else{
-			pDev->WritePin(&pDev->rsrc, i, (OUTPUT_STATUS)j);
-			RESPONSE(packetOut, OK, (char*)pDev->rsrc.name, "writepin", "%x", pDev->rsrc.status);
-		}
-		return 1;
-	}
-	//%devName.writepin(indx1,status1,indx2,status2)
-	else if(isSameStr(packetIn->addr[1], "writepin") && packetIsMatch(packetIn, "%s%s%u%u%u%u")){
-		i = *(u32*)packetIn->addr[2];
-		j = *(u32*)packetIn->addr[3];
-		ii = *(u32*)packetIn->addr[4];
-		jj = *(u32*)packetIn->addr[5];
-		if(i>16 || ii>16)	RESPONSE(packetOut, ERR, (char*)pDev->rsrc.name, "writepin", "%s", "param_err");
-		else{
-			pDev->rsrc.status &= 0xffff^(1U<<i);
-			pDev->rsrc.status &= 0xffff^(1U<<ii);
-			if(j)	pDev->rsrc.status |= (1U<<i);
-			if(jj)	pDev->rsrc.status |= (1U<<ii);
-			pDev->WritePinHEX(&pDev->rsrc, pDev->rsrc.status);
-			RESPONSE(packetOut, OK, (char*)pDev->rsrc.name, "writepin", "%x", pDev->rsrc.status);
-		}
-		return 1;
-	}
-	//%devName.togglepin()
-	else if(isSameStr(packetIn->addr[1], "togglepin") && packetIsMatch(packetIn, "%s%s")){
-		pDev->TogglePin(&pDev->rsrc, 0xff);
-		RESPONSE(packetOut, OK, (char*)pDev->rsrc.name, "togglepin", "%x", pDev->rsrc.status);
-		return 1;
-	}
-	//%devName.togglepin(indx)
-	else if(isSameStr(packetIn->addr[1], "togglepin") && packetIsMatch(packetIn, "%s%s%u")){
-		pDev->TogglePin(&pDev->rsrc, *(u32*)packetIn->addr[2]);
-		RESPONSE(packetOut, OK, (char*)pDev->rsrc.name, "togglepin", "%x", pDev->rsrc.status);
-		return 1;
-	}
-	//%devName.togglepin(indx)
-	else if(isSameStr(packetIn->addr[1], "togglepin") && packetIsMatch(packetIn, "%s%s%u%u")){
-		pDev->TogglePin(&pDev->rsrc, *(u32*)packetIn->addr[2]);
-		pDev->TogglePin(&pDev->rsrc, *(u32*)packetIn->addr[3]);
-		RESPONSE(packetOut, OK, (char*)pDev->rsrc.name, "togglepin", "%x", pDev->rsrc.status);
-		return 1;
+	else if(strncmp(line, ".readpin  ", strlen(".readpin  ")) == 0){
+		strFormat(cmd, len, "+ok@%s.readpin(0x%x)\r\n", pRsrc->name, pRsrc->status);
 	}
 	
-	//%devName.runPin(ms)
-	else if(isSameStr(packetIn->addr[1], "runpin") && packetIsMatch(packetIn, "%s%s%u")){
-		pDev->AutoTogglePin(&pDev->rsrc, 0xff, *(u32*)packetIn->addr[2]);
-		RESPONSE(packetOut, OK, (char*)pDev->rsrc.name, "runpin", NULL);
-		return 1;
+	//output.writePin(status)/(indx, b)/(indx0,bit0,indx1,bit1)
+	else if(sscanf(line, ".writepin %d %d %d %d ", &i, &j, &ii, &jj)==4){
+		if(i>=pRsrc->gpioLen || ii>=pRsrc->gpioLen){	
+			strFormat(cmd, len, "+err@%s.writepin(\"overflow\")\r\n", pRsrc->name);	
+			return 1;	
+		}
+		if(j)		pDev->WritePin(pRsrc, i, PIN_SET);
+		else pDev->WritePin(pRsrc, i, PIN_RESET);
+		if(jj)	pDev->WritePin(pRsrc, ii, PIN_SET);
+		else pDev->WritePin(pRsrc, ii, PIN_RESET);
+		strFormat(cmd, len, "+ok@%s.writepin(%d,%d,%d,%d)\r\n", pRsrc->name, i, j, ii, jj);
 	}
-	//%devName.runPin(indx, ms)
-	else if(isSameStr(packetIn->addr[1], "runpin") && packetIsMatch(packetIn, "%s%s%u%u")){
-		pDev->AutoTogglePin(&pDev->rsrc, *(u32*)packetIn->addr[2], *(u32*)packetIn->addr[3]);
-		RESPONSE(packetOut, OK, (char*)pDev->rsrc.name, "runpin", NULL);
-		return 1;
+	else if(sscanf(line, ".writepin %d %d ", &i, &j)==2){
+		if(i>=pRsrc->gpioLen){	
+			strFormat(cmd, len, "+err@%s.writepin(\"overflow\")\r\n", pRsrc->name);
+			return 1;	
+		}
+		if(j)		pDev->WritePin(pRsrc, i, PIN_SET);
+		else pDev->WritePin(pRsrc, i, PIN_RESET);
+		strFormat(cmd, len, "+ok@%s.writepin(%d,%d)\r\n", pRsrc->name, i, j);
 	}
+	else if(sscanf(line, ".writepin %d ", &i)==1){
+		pDev->WritePinHEX(pRsrc, i);
+		strFormat(cmd, len, "+ok@%s.writepin(%d)\r\n", pRsrc->name, i);
+	}
+
+	//output.togglePin()/(indx)/(indx0,indx1)
+	else if(sscanf(line, ".togglepin %d %d ", &i, &j)==2){
+		if(i>=pRsrc->gpioLen || j>=pRsrc->gpioLen){	
+			strFormat(cmd, len, "+err@%s.readpin(\"overflow\")\r\n", pRsrc->name);	
+			return 1;	
+		}
+		pDev->TogglePin(pRsrc, i);
+		pDev->TogglePin(pRsrc, j);
+		strFormat(cmd, len, "+ok@%s.togglepin(%d,%d)\r\n", pRsrc->name, i,j);
+	}
+	else if(sscanf(line, ".togglepin %d ", &i)==1){
+		if(i>=pRsrc->gpioLen){	
+			strFormat(cmd, len, "+err@%s.togglepin(\"overflow\")\r\n", pRsrc->name);	
+			return 1;	
+		}
+		pDev->TogglePin(pRsrc, i);
+		strFormat(cmd, len, "+ok@%s.togglepin(%d)\r\n", pRsrc->name, i);
+	}
+	else if(strncmp(line, ".togglepin  ", strlen(".togglepin  ")) == 0){
+		for(i=0;i<pRsrc->gpioLen;i++)	pDev->TogglePin(pRsrc, i);
+		strFormat(cmd, len, "+ok@%s.togglepin()\r\n", pRsrc->name);
+	}
+	else	strFormat(cmd, len, "+err@%s",CMD);
 	
-	//%devName.stopPin()
-	else if(isSameStr(packetIn->addr[1], "stoppin") && packetIsMatch(packetIn, "%s%s")){
-		pDev->StopTogglePin(&pDev->rsrc, 0xff, 0);
-		RESPONSE(packetOut, OK, (char*)pDev->rsrc.name, "stoppin", NULL);
-		return 1;
-	}
-	//%devName.stopPin(status)
-	else if(isSameStr(packetIn->addr[1], "stoppin") && packetIsMatch(packetIn, "%s%s%u")){
-		pDev->StopTogglePin(&pDev->rsrc, 0xff, *(u32*)packetIn->addr[2]);
-		RESPONSE(packetOut, OK, (char*)pDev->rsrc.name, "stoppin", NULL);
-		return 1;
-	}
-	//%devName.stoppin(indx, itsStatus)
-	else if(isSameStr(packetIn->addr[1], "stoppin") && packetIsMatch(packetIn, "%s%s%u%u")){
-		pDev->StopTogglePin(&pDev->rsrc, *(u32*)packetIn->addr[2], *(u32*)packetIn->addr[3]);
-		RESPONSE(packetOut, OK, (char*)pDev->rsrc.name, "stoppin", NULL);
-		return 1;
-	}
-	else	RESPONSE_ORG(packetOut, "+err@", packetIn);
-	return 0;
+	return 1;
 }
 
 /******************* (C) COPYRIGHT 2007 STMicroelectronics *****END OF FILE****/

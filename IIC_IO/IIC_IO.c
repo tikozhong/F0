@@ -4,6 +4,7 @@ filename: IIC_IO.c
 
 /************************包含头文件***************************************************/
 #include "IIC_IO.h"
+#include "gpioDecal.h"
 
 #define TICK_IIC 1
 /**********************************************************
@@ -33,11 +34,9 @@ void IIC_IO_Setup(IIC_IO_Dev_T *pDev, const PIN_T scl, const PIN_T sda){
 	pRsrc->SDA = sda;
 	pRsrc->isBusy = 1;
 	//config2
-//	PIN_OP.As_OUTPUT_OD_NOPULL_HIGH(sda);	
-//	PIN_OP.As_OUTPUT_OD_NOPULL_HIGH(scl);
+	as_OUTPUT_OD_NOPULL_HIGH(scl);
+	as_OUTPUT_OD_NOPULL_HIGH(sda);
 	//registe op
-//	pDev->TakenThis = IIC_takenThis;
-//	pDev->FreeThis = IIC_freeThis;
 	pDev->Start = IIC_START;
 	pDev->Restart = IIC_RESTART;
 	pDev->Stop = IIC_STOP;
